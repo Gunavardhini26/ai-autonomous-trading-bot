@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build All Services",
+      "type": "shell",
+      "command": "cd auth-service && mvn clean install && cd ../market-service && mvn clean install && cd ../trading-service && mvn clean install",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Auth Service",
+      "type": "shell",
+      "command": "cd auth-service && mvn spring-boot:run",
+      "isBackground": true,
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Market Service",
+      "type": "shell",
+      "command": "cd market-service && mvn spring-boot:run",
+      "isBackground": true,
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Trading Service",
+      "type": "shell",
+      "command": "cd trading-service && mvn spring-boot:run",
+      "isBackground": true,
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
