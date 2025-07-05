@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  body {
+    @apply bg-trading-dark text-gray-100 antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-trading-accent hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-trading-secondary hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-danger {
+    @apply bg-trading-danger hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200;
+  }
+  
+  .card {
+    @apply bg-trading-primary rounded-lg shadow-lg border border-gray-700;
+  }
+  
+  .input-field {
+    @apply bg-trading-secondary border border-gray-600 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-trading-accent focus:border-transparent;
+  }
+  
+  .navbar {
+    @apply bg-trading-primary border-b border-gray-700 shadow-lg;
+  }
+  
+  .sidebar {
+    @apply bg-trading-primary border-r border-gray-700 h-full;
+  }
+  
+  .price-up {
+    @apply text-trading-success;
+  }
+  
+  .price-down {
+    @apply text-trading-danger;
+  }
+  
+  .price-neutral {
+    @apply text-gray-400;
+  }
+  
+  .status-active {
+    @apply bg-trading-success text-white;
+  }
+  
+  .status-inactive {
+    @apply bg-gray-500 text-white;
+  }
+  
+  .status-error {
+    @apply bg-trading-danger text-white;
+  }
+  
+  .loading-spinner {
+    @apply animate-spin rounded-full h-6 w-6 border-b-2 border-trading-accent;
+  }
+  
+  .chart-container {
+    @apply bg-trading-secondary rounded-lg p-4 border border-gray-600;
+  }
+  
+  .metric-card {
+    @apply bg-gradient-to-br from-trading-secondary to-trading-primary p-6 rounded-lg border border-gray-600 hover:border-trading-accent transition-colors duration-200;
+  }
+  
+  .news-item {
+    @apply bg-trading-secondary p-4 rounded-lg border border-gray-600 hover:border-gray-500 transition-colors duration-200;
+  }
+}
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+  
+  .glass-effect {
+    backdrop-filter: blur(10px);
+    background: rgba(31, 41, 55, 0.8);
+  }
+  
+  .glow-accent {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  }
+  
+  .glow-danger {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #6b7280;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Chart styling */
+.chart-tooltip {
+  @apply bg-trading-dark border border-gray-600 rounded-lg p-2 text-sm shadow-lg;
+}
+
+/* Animation classes */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Real-time data blinking effect */
+@keyframes blink-green {
+  0%, 50% { background-color: rgba(16, 185, 129, 0.2); }
+  100% { background-color: transparent; }
+}
+
+@keyframes blink-red {
+  0%, 50% { background-color: rgba(239, 68, 68, 0.2); }
+  100% { background-color: transparent; }
+}
+
+.blink-up {
+  animation: blink-green 1s ease-in-out;
+}
+
+.blink-down {
+  animation: blink-red 1s ease-in-out;
+}
