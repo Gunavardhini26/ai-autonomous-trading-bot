@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -30,19 +28,16 @@ services:
     container_name: trading_backend
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/trading_bot
-      - REDIS_URL=redis://redis:6379
-      - ANGEL_API_KEY=Zh1i8PYW
-      - ANGEL_CLIENT_ID=AAAH308879
-      - ANGEL_SECRET_KEY=349b824c-c12c-46ad-8aa7-3f0c357c5020
-      - ALPHA_VANTAGE_API_KEY=EC1CRBHX7KYEKJ8C
-      - NEWS_API_KEY=ba4e883c48c640dd8449b0f9063b9855
     depends_on:
       - postgres
       - redis
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/trading_bot
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
+    working_dir: /app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   # React Frontend
   frontend:
@@ -58,39 +53,6 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-
-  # Celery Worker (for AI training jobs)
-  celery-worker:
-    build: ./backend
-    container_name: trading_celery
-    command: celery -A jobs.tasks worker --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/trading_bot
-      - REDIS_URL=redis://redis:6379
-      - ANGEL_API_KEY=Zh1i8PYW
-      - ANGEL_CLIENT_ID=AAAH308879
-      - ANGEL_SECRET_KEY=349b824c-c12c-46ad-8aa7-3f0c357c5020
-      - ALPHA_VANTAGE_API_KEY=EC1CRBHX7KYEKJ8C
-      - NEWS_API_KEY=ba4e883c48c640dd8449b0f9063b9855
-    depends_on:
-      - postgres
-      - redis
-    volumes:
-      - ./backend:/app
-
-  # Celery Beat (for scheduled tasks)
-  celery-beat:
-    build: ./backend
-    container_name: trading_celery_beat
-    command: celery -A jobs.tasks beat --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/trading_bot
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - postgres
-      - redis
-    volumes:
-      - ./backend:/app
 
 volumes:
   postgres_data:

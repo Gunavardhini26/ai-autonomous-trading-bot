@@ -6,7 +6,8 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import pyotp
 import redis
-from smartapi import SmartConnect, SmartWebSocket
+from SmartApi import SmartConnect
+# from SmartApi.smartWebSocketV2 import SmartWebSocketV2  # WebSocket import
 import logging
 
 from config import (
