@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+// import { motion } from 'framer-motion';
 import { 
   ChartBarIcon, 
   CpuChipIcon, 
   ExclamationTriangleIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
   ClockIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
@@ -81,11 +81,7 @@ const AdvancedDashboard: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
-        />
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -121,14 +117,12 @@ const AdvancedDashboard: React.FC = () => {
             </div>
           </div>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+        <button
           onClick={fetchDashboardData}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors hover:scale-105 transform"
         >
           Refresh Data
-        </motion.button>
+        </button>
       </div>
 
       {/* Key Metrics Row */}
@@ -145,7 +139,7 @@ const AdvancedDashboard: React.FC = () => {
           title="Daily P&L"
           value={formatCurrency(portfolio.dailyPnL)}
           change={portfolio.dailyPnL}
-          icon={portfolio.dailyPnL >= 0 ? TrendingUpIcon : TrendingDownIcon}
+          icon={portfolio.dailyPnL >= 0 ? ArrowTrendingUpIcon : ArrowTrendingDownIcon}
           color={portfolio.dailyPnL >= 0 ? "green" : "red"}
         />
         <MetricCard
@@ -179,14 +173,14 @@ const AdvancedDashboard: React.FC = () => {
 
       {/* Secondary Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RiskMetrics data={risk} />
-        <PerformanceMetrics />
+        <RiskMetrics riskData={risk} />
+        <PerformanceMetrics performanceData={performance} />
       </div>
 
       {/* Full Width Sections */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <MarketOverview />
-        <TradingActivity />
+        <MarketOverview marketData={{}} />
+        <TradingActivity activities={[]} />
       </div>
     </div>
   );
@@ -220,11 +214,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`p-6 rounded-xl border-2 ${colorClasses[color]} bg-white shadow-sm hover:shadow-md transition-shadow`}
-    >
+    <div className={`p-6 rounded-xl border-2 ${colorClasses[color]} bg-white shadow-sm hover:shadow-md transition-shadow`}>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-600">{title}</p>
@@ -234,9 +224,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
               change >= 0 ? 'text-green-600' : 'text-red-600'
             }`}>
               {change >= 0 ? (
-                <TrendingUpIcon className="h-4 w-4 mr-1" />
+                <ArrowTrendingUpIcon className="h-4 w-4 mr-1" />
               ) : (
-                <TrendingDownIcon className="h-4 w-4 mr-1" />
+                <ArrowTrendingDownIcon className="h-4 w-4 mr-1" />
               )}
               {formatCurrency(Math.abs(change))}
               {changePercent !== undefined && ` (${formatPercent(changePercent)})`}
@@ -248,7 +238,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
         </div>
         <Icon className={`h-8 w-8 ${colorClasses[color].split(' ')[1]}`} />
       </div>
-    </motion.div>
+    </div>
   );
 };
 

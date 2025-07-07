@@ -11,7 +11,7 @@ import Analytics from './components/Analytics/Analytics';
 import Settings from './components/Settings/Settings';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
-import ProtectedRoute from './components/ProtectedRoute/ProtectedRoute';
+import ProtectedRoute from './components/Auth/ProtectedRoute';
 import './App.css';
 
 function App() {

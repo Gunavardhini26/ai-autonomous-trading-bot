@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChartBarIcon, CpuChipIcon, ExclamationTriangleIcon, TrendingUpIcon } from '@heroicons/react/24/outline';
+import { ChartBarIcon, CpuChipIcon, ExclamationTriangleIcon, ArrowTrendingUpIcon } from '@heroicons/react/24/outline';
+import { formatCurrency, formatPercent } from '../../utils/formatters';
 
 interface DashboardData {
   portfolio: {
@@ -88,7 +89,7 @@ const Dashboard: React.FC = () => {
           title="Daily P&L"
           value={formatCurrency(data.portfolio.dailyPnL)}
           change={data.portfolio.dailyPnL}
-          icon={data.portfolio.dailyPnL >= 0 ? TrendingUpIcon : ExclamationTriangleIcon}
+          icon={data.portfolio.dailyPnL >= 0 ? ArrowTrendingUpIcon : ExclamationTriangleIcon}
           color={data.portfolio.dailyPnL >= 0 ? 'green' : 'red'}
         />
         <MetricCard
