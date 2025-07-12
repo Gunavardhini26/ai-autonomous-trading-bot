@@ -1,65 +1,50 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Provider } from 'react-redux';
-import { Toaster } from 'react-hot-toast';
-import { store } from './store/store';
-import Navbar from './components/Navbar/Navbar';
-import Dashboard from './components/Dashboard/Dashboard';
-import Portfolio from './components/Portfolio/Portfolio';
-import Trading from './components/Trading/Trading';
-import Analytics from './components/Analytics/Analytics';
-import Settings from './components/Settings/Settings';
-import Login from './components/Auth/Login';
-import Register from './components/Auth/Register';
-import ProtectedRoute from './components/Auth/ProtectedRoute';
-import './App.css';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { AuthProvider } from './contexts/AuthContext';
+import LoginNew from './pages/LoginNew';
+import LayoutNew from './components/LayoutNew';
+import DashboardNew from './pages/DashboardNew';
+import BrokerManagement from './pages/BrokerManagement';
+import LiveMarketNew from './pages/LiveMarketNew';
+import TradeLogsNew from './pages/TradeLogsNew';
+import StrategyLabNew from './pages/StrategyLabNew';
+import AITrainingNew from './pages/AITrainingNew';
+import SentimentNew from './pages/SentimentNew';
+import OrdersNew from './pages/OrdersNew';
+import PortfolioNew from './pages/PortfolioNew';
+import SettingsNew from './pages/SettingsNew';
+import WalletNew from './pages/WalletNew';
+import PaperTradingNew from './pages/PaperTradingNew';
 
 function App() {
   return (
-    <Provider store={store}>
-      <div className="App min-h-screen bg-gray-50">
+    <ThemeProvider>
+      <AuthProvider>
         <Router>
-          <Toaster 
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#363636',
-                color: '#fff',
-              },
-            }}
-          />
-          
-          <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            
-            {/* Protected routes */}
-            <Route 
-              path="/*" 
-              element={
-                <ProtectedRoute>
-                  <div className="flex">
-                    <Navbar />
-                    <main className="flex-1 ml-64">
-                      <Routes>
-                        <Route path="/" element={<Navigate to="/dashboard" />} />
-                        <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/portfolio" element={<Portfolio />} />
-                        <Route path="/trading" element={<Trading />} />
-                        <Route path="/analytics" element={<Analytics />} />
-                        <Route path="/settings" element={<Settings />} />
-                      </Routes>
-                    </main>
-                  </div>
-                </ProtectedRoute>
-              } 
-            />
-          </Routes>
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+            <Routes>
+              <Route path="/login" element={<LoginNew />} />
+              <Route path="/" element={<LayoutNew />}>
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="dashboard" element={<DashboardNew />} />
+                <Route path="brokers" element={<BrokerManagement />} />
+                <Route path="market" element={<LiveMarketNew />} />
+                <Route path="orders" element={<OrdersNew />} />
+                <Route path="portfolio" element={<PortfolioNew />} />
+                <Route path="wallet" element={<WalletNew />} />
+                <Route path="paper-mode" element={<PaperTradingNew />} />
+                <Route path="trade-logs" element={<TradeLogsNew />} />
+                <Route path="strategy-lab" element={<StrategyLabNew />} />
+                <Route path="ai-training" element={<AITrainingNew />} />
+                <Route path="sentiment" element={<SentimentNew />} />
+                <Route path="settings" element={<SettingsNew />} />
+              </Route>
+            </Routes>
+          </div>
         </Router>
-      </div>
-    </Provider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

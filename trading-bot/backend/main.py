@@ -1,213 +1,230 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-import uvicorn
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
+from typing import Dict, List, Optional, Any
 import asyncio
 import json
-from typing import List
 import logging
-
-# Import all modules for advanced AI trading bot
-from db.database import engine, Base
-from db import models
-from routers import auth, market, trading, ai_engine, news, settings
-from data.market_feed import WebSocketManager, start_market_feed
-from ai.advanced_engine import AdvancedAIEngine
-from ai.risk_manager import AdvancedRiskManager
-from ai.portfolio_manager import AdvancedPortfolioManager
-from security.auth import get_current_user
-
-# Initialize advanced AI components
-ai_engine = AdvancedAIEngine()
-risk_manager = AdvancedRiskManager()
-portfolio_manager = AdvancedPortfolioManager()
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
+from datetime import datetime, timedelta
+import uuid
+import uvicorn
+import random
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="AI Autonomous Trading Bot",
-    description="Lightning-fast AI-powered trading platform for Indian stock market",
-    version="1.0.0"
-)
+# Initialize FastAPI app
+app = FastAPI(title="AI Trading Bot API", version="1.0.0")
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://frontend:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include all routers for full functionality
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(market.router, prefix="/api/market", tags=["Market Data"])
-app.include_router(trading.router, prefix="/api/trading", tags=["Trading"])
-app.include_router(ai_engine.router, prefix="/api/ai", tags=["AI Engine"])
-app.include_router(news.router, prefix="/api/news", tags=["News & Sentiment"])
-app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
+# Security
+security = HTTPBearer()
 
-# WebSocket Manager for real-time data
-websocket_manager = WebSocketManager()
+# In-memory storage for demo
+data_store = {
+    "users": {},
+    "portfolios": {},
+    "orders": {},
+    "market_data": {},
+    "ai_signals": {},
+    "trades": []
+}
 
-# Simple WebSocket connection list for now
+# WebSocket connections
 active_connections: List[WebSocket] = []
 
+# Pydantic models
+class User(BaseModel):
+    email: str
+    password: str
+
+class LoginResponse(BaseModel):
+    access_token: str
+    user_id: str
+    email: str
+
+class PortfolioData(BaseModel):
+    total_value: float
+    daily_pnl: float
+    positions: List[Dict]
+    cash_balance: float
+
+class Order(BaseModel):
+    symbol: str
+    side: str
+    quantity: int
+    price: float
+    order_type: str
+
+# Helper functions
+def generate_token():
+    return str(uuid.uuid4())
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    if token not in data_store["users"]:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return data_store["users"][token]
+
+async def broadcast_to_websockets(message: dict):
+    if active_connections:
+        for connection in active_connections:
+            try:
+                await connection.send_text(json.dumps(message))
+            except:
+                active_connections.remove(connection)
+
+# Authentication endpoints
+@app.post("/api/auth/login", response_model=LoginResponse)
+async def login(user: User):
+    token = generate_token()
+    user_id = str(uuid.uuid4())
+    
+    data_store["users"][token] = {
+        "id": user_id,
+        "email": user.email,
+        "token": token
+    }
+    
+    return LoginResponse(
+        access_token=token,
+        user_id=user_id,
+        email=user.email
+    )
+
+@app.post("/api/auth/logout")
+async def logout(current_user: dict = Depends(get_current_user)):
+    token = current_user["token"]
+    if token in data_store["users"]:
+        del data_store["users"][token]
+    return {"message": "Logged out successfully"}
+
+# Portfolio endpoints
+@app.get("/api/portfolio", response_model=PortfolioData)
+async def get_portfolio(current_user: dict = Depends(get_current_user)):
+    portfolio = {
+        "total_value": 125000.00,
+        "daily_pnl": 2500.00,
+        "positions": [
+            {"symbol": "RELIANCE", "quantity": 10, "avg_price": 2850.00, "current_price": 2875.00, "pnl": 250.00},
+            {"symbol": "TCS", "quantity": 5, "avg_price": 3650.00, "current_price": 3625.00, "pnl": -125.00},
+            {"symbol": "INFY", "quantity": 15, "avg_price": 1750.00, "current_price": 1765.00, "pnl": 225.00}
+        ],
+        "cash_balance": 50000.00
+    }
+    
+    return PortfolioData(**portfolio)
+
+# Market data endpoints
+@app.get("/api/market/live")
+async def get_live_market_data():
+    symbols = ["RELIANCE", "TCS", "INFY", "HDFC", "HDFCBANK", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "KOTAKBANK"]
+    
+    market_data = []
+    for symbol in symbols:
+        price = random.uniform(1500, 3000)
+        change = random.uniform(-50, 50)
+        change_percent = (change / price) * 100
+        
+        data = {
+            "symbol": symbol,
+            "price": round(price, 2),
+            "change": round(change, 2),
+            "change_percent": round(change_percent, 2),
+            "volume": random.randint(100000, 1000000),
+            "timestamp": datetime.now().isoformat()
+        }
+        market_data.append(data)
+    
+    return {"data": market_data}
+
+# Trading endpoints
+@app.post("/api/orders/place")
+async def place_order(order: Order, current_user: dict = Depends(get_current_user)):
+    order_id = str(uuid.uuid4())
+    
+    order_data = {
+        "order_id": order_id,
+        "user_id": current_user["id"],
+        "symbol": order.symbol,
+        "side": order.side,
+        "quantity": order.quantity,
+        "price": order.price,
+        "order_type": order.order_type,
+        "status": "FILLED",
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    data_store["orders"][order_id] = order_data
+    data_store["trades"].append(order_data)
+    
+    await broadcast_to_websockets({
+        "type": "order_update",
+        "data": order_data
+    })
+    
+    return {"order_id": order_id, "status": "success", "message": "Order placed successfully"}
+
+@app.get("/api/orders")
+async def get_orders(current_user: dict = Depends(get_current_user)):
+    user_orders = [order for order in data_store["orders"].values() 
+                   if order["user_id"] == current_user["id"]]
+    return {"orders": user_orders}
+
+@app.get("/api/trades")
+async def get_trades(current_user: dict = Depends(get_current_user)):
+    user_trades = [trade for trade in data_store["trades"] 
+                   if trade["user_id"] == current_user["id"]]
+    return {"trades": user_trades}
+
+# AI endpoints
+@app.get("/api/ai/signals")
+async def get_ai_signals():
+    symbols = ["RELIANCE", "TCS", "INFY", "HDFC", "HDFCBANK"]
+    signals = []
+    
+    for symbol in symbols:
+        signals.append({
+            "symbol": symbol,
+            "signal": random.choice(["BUY", "SELL", "HOLD"]),
+            "confidence": round(random.uniform(0.6, 0.95), 2),
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    return {"signals": signals}
+
+# WebSocket endpoint
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """Advanced WebSocket endpoint for real-time trading data"""
-    await websocket_manager.connect(websocket)
+    await websocket.accept()
+    active_connections.append(websocket)
+    
     try:
         while True:
-            data = await websocket.receive_text()
-            message = json.loads(data)
-            
-            # Handle different message types
-            if message.get("type") == "subscribe":
-                # Subscribe to real-time market data
-                symbols = message.get("symbols", [])
-                await websocket_manager.subscribe_to_symbols(websocket, symbols)
-            elif message.get("type") == "get_portfolio":
-                # Get real-time portfolio data
-                portfolio_data = await portfolio_manager.get_portfolio_summary()
-                await websocket.send_text(json.dumps({
-                    "type": "portfolio_update",
-                    "data": portfolio_data
-                }))
-            elif message.get("type") == "get_signals":
-                # Get AI trading signals
-                signals = await ai_engine.get_real_time_signals()
-                await websocket.send_text(json.dumps({
-                    "type": "ai_signals",
-                    "data": signals
-                }))
-                
+            # Send live market data every 2 seconds
+            market_data = await get_live_market_data()
+            await websocket.send_text(json.dumps({
+                "type": "market_data",
+                "data": market_data
+            }))
+            await asyncio.sleep(2)
     except WebSocketDisconnect:
-        await websocket_manager.disconnect(websocket)
+        active_connections.remove(websocket)
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize advanced AI trading components on startup"""
-    try:
-        # Initialize AI engine
-        await ai_engine.initialize()
-        logging.info("Advanced AI Engine initialized")
-        
-        # Initialize risk management
-        await risk_manager.initialize()
-        logging.info("Risk Management System initialized")
-        
-        # Initialize portfolio manager
-        await portfolio_manager.initialize()
-        logging.info("Portfolio Manager initialized")
-        
-        # Start market data feed
-        asyncio.create_task(start_market_feed(websocket_manager))
-        logging.info("Market data feed started")
-        
-        # Start background AI processing
-        asyncio.create_task(ai_background_processor())
-        logging.info("AI background processor started")
-        
-        print("🚀 Advanced AI Trading Bot Backend started successfully!")
-        
-    except Exception as e:
-        logging.error(f"Startup error: {e}")
-        raise
-
-async def ai_background_processor():
-    """Background task for AI processing and portfolio management"""
-    while True:
-        try:
-            # Generate AI signals every 30 seconds
-            await ai_engine.process_market_data()
-            
-            # Update portfolio optimization every 5 minutes
-            await asyncio.sleep(300)
-            await portfolio_manager.rebalance_portfolio()
-            
-            # Risk assessment every minute
-            await asyncio.sleep(60)
-            await risk_manager.assess_portfolio_risk()
-            
-        except Exception as e:
-            logging.error(f"Background processing error: {e}")
-            await asyncio.sleep(30)
-
-# Health check endpoint
+# Health check
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "service": "AI Trading Bot Backend",
-        "version": "2.0.0",
-        "components": {
-            "ai_engine": "running",
-            "risk_manager": "running", 
-            "portfolio_manager": "running",
-            "market_feed": "running"
-        }
-    }
-
-@app.get("/")
-async def root():
-    return {
-        "message": "🤖 Advanced AI Autonomous Trading Bot API",
-        "description": "State-of-the-art AI-powered trading platform with real-time analytics",
-        "features": [
-            "Deep Learning Price Prediction",
-            "Reinforcement Learning Trading Agent", 
-            "Advanced Risk Management",
-            "Portfolio Optimization",
-            "Real-time Market Data",
-            "Sentiment Analysis",
-            "Multi-strategy Trading"
-        ],
-        "endpoints": {
-            "docs": "/docs",
-            "health": "/health",
-            "websocket": "/ws"
-        }
-    }
-
-# Advanced analytics endpoint
-@app.get("/api/analytics/dashboard")
-async def get_dashboard_analytics():
-    """Get comprehensive dashboard analytics"""
-    try:
-        portfolio_summary = await portfolio_manager.get_portfolio_summary()
-        risk_metrics = await risk_manager.get_risk_metrics()
-        ai_signals = await ai_engine.get_latest_signals()
-        
-        return {
-            "portfolio": portfolio_summary,
-            "risk": risk_metrics,
-            "ai_signals": ai_signals,
-            "timestamp": asyncio.get_event_loop().time()
-        }
-    except Exception as e:
-        logging.error(f"Dashboard analytics error: {e}")
-        return {"error": "Unable to fetch analytics data"}
-
-# Performance metrics endpoint  
-@app.get("/api/analytics/performance")
-async def get_performance_metrics():
-    """Get detailed performance analytics"""
-    try:
-        return await portfolio_manager.get_performance_analytics()
-    except Exception as e:
-        logging.error(f"Performance metrics error: {e}")
-        return {"error": "Unable to fetch performance data"}
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8000)

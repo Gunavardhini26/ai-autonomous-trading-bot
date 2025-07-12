@@ -1,174 +1,350 @@
-import { io, Socket } from 'socket.io-client';
-import { store } from '../store/store';
-import { updateLiveData, updateConnectionStatus } from '../store/slices/marketSlice';
-import { addSignal } from '../store/slices/aiSlice';
-import { addTrade, updatePosition, updatePortfolio } from '../store/slices/tradingSlice';
-import { addNewsArticle } from '../store/slices/newsSlice';
+// WebSocket Service for Real-time Data
+// Handles all WebSocket connections and real-time updates
 
-class WebSocketService {
-  private socket: Socket | null = null;
+import { API_CONFIG, WS_EVENTS } from '../config/api';
+
+export interface WebSocketMessage {
+  type: string;
+  data: any;
+  timestamp: number;
+}
+
+export interface WebSocketConfig {
+  url: string;
+  reconnectAttempts: number;
+  reconnectDelay: number;
+  heartbeatInterval: number;
+}
+
+export class WebSocketService {
+  private ws: WebSocket | null = null;
+  private config: WebSocketConfig;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private reconnectInterval = 5000;
+  private reconnectDelay = 1000;
+  private heartbeatInterval = 30000;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+  private isConnected = false;
+  private isReconnecting = false;
+  private subscriptions: Map<string, Set<(data: any) => void>> = new Map();
 
-  connect() {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.warn('No auth token found, cannot connect to WebSocket');
-      return;
+  constructor(config?: Partial<WebSocketConfig>) {
+    this.config = {
+      url: API_CONFIG.WS_URL,
+      reconnectAttempts: 5,
+      reconnectDelay: 1000,
+      heartbeatInterval: 30000,
+      ...config,
+    };
+  }
+
+  // Connect to WebSocket
+  public connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const wsUrl = token ? `${this.config.url}?token=${token}` : this.config.url;
+        
+        this.ws = new WebSocket(wsUrl);
+
+        this.ws.onopen = () => {
+          console.log('WebSocket connected');
+          this.isConnected = true;
+          this.isReconnecting = false;
+          this.reconnectAttempts = 0;
+          this.startHeartbeat();
+          resolve();
+        };
+
+        this.ws.onmessage = (event) => {
+          try {
+            const message: WebSocketMessage = JSON.parse(event.data);
+            this.handleMessage(message);
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+
+        this.ws.onclose = (event) => {
+          console.log('WebSocket disconnected:', event.code, event.reason);
+          this.isConnected = false;
+          this.stopHeartbeat();
+          
+          if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnect();
+          }
+        };
+
+        this.ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          reject(error);
+        };
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  // Disconnect from WebSocket
+  public disconnect(): void {
+    if (this.ws) {
+      this.isReconnecting = false;
+      this.ws.close();
+      this.ws = null;
     }
-
-    const wsUrl = process.env.REACT_APP_WS_URL || 'http://localhost:8000';
-    
-    this.socket = io(wsUrl, {
-      auth: {
-        token: token
-      },
-      transports: ['websocket'],
-      timeout: 20000,
-    });
-
-    this.setupEventListeners();
+    this.stopHeartbeat();
   }
 
-  private setupEventListeners() {
-    if (!this.socket) return;
-
-    // Connection events
-    this.socket.on('connect', () => {
-      console.log('WebSocket connected');
-      store.dispatch(updateConnectionStatus(true));
-      this.reconnectAttempts = 0;
-    });
-
-    this.socket.on('disconnect', (reason) => {
-      console.log('WebSocket disconnected:', reason);
-      store.dispatch(updateConnectionStatus(false));
-      this.handleReconnect();
-    });
-
-    this.socket.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error);
-      store.dispatch(updateConnectionStatus(false));
-      this.handleReconnect();
-    });
-
-    // Market data events
-    this.socket.on('market_data', (data) => {
-      store.dispatch(updateLiveData(data));
-    });
-
-    this.socket.on('price_update', (data) => {
-      store.dispatch(updateLiveData(data));
-    });
-
-    // Trading events
-    this.socket.on('trade_executed', (data) => {
-      store.dispatch(addTrade(data));
-    });
-
-    this.socket.on('position_update', (data) => {
-      store.dispatch(updatePosition(data));
-    });
-
-    this.socket.on('portfolio_update', (data) => {
-      store.dispatch(updatePortfolio(data));
-    });
-
-    // AI events
-    this.socket.on('ai_signal', (data) => {
-      store.dispatch(addSignal(data));
-    });
-
-    this.socket.on('model_trained', (data) => {
-      console.log('Model training completed:', data);
-      // You can dispatch a specific action here if needed
-    });
-
-    // News events
-    this.socket.on('news_article', (data) => {
-      store.dispatch(addNewsArticle(data));
-    });
-
-    // Error events
-    this.socket.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-  }
-
-  private handleReconnect() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      
-      setTimeout(() => {
-        this.connect();
-      }, this.reconnectInterval * this.reconnectAttempts);
+  // Send message to WebSocket
+  public send(message: any): void {
+    if (this.ws && this.isConnected) {
+      this.ws.send(JSON.stringify(message));
     } else {
-      console.error('Max reconnection attempts reached');
+      console.warn('WebSocket not connected. Message not sent:', message);
     }
   }
 
-  // Subscribe to market data for specific symbols
-  subscribeToMarketData(symbols: string[]) {
-    if (this.socket?.connected) {
-      this.socket.emit('subscribe_market_data', { symbols });
+  // Subscribe to specific event types
+  public subscribe(eventType: string, callback: (data: any) => void): void {
+    if (!this.subscriptions.has(eventType)) {
+      this.subscriptions.set(eventType, new Set());
+    }
+    this.subscriptions.get(eventType)!.add(callback);
+  }
+
+  // Unsubscribe from specific event types
+  public unsubscribe(eventType: string, callback: (data: any) => void): void {
+    if (this.subscriptions.has(eventType)) {
+      this.subscriptions.get(eventType)!.delete(callback);
     }
   }
 
-  // Unsubscribe from market data for specific symbols
-  unsubscribeFromMarketData(symbols: string[]) {
-    if (this.socket?.connected) {
-      this.socket.emit('unsubscribe_market_data', { symbols });
-    }
+  // Subscribe to market data updates
+  public subscribeToMarketData(symbols: string[], callback: (data: any) => void): void {
+    this.subscribe(WS_EVENTS.MARKET_DATA, callback);
+    this.send({
+      type: 'subscribe',
+      data: { symbols },
+    });
   }
 
-  // Subscribe to trading updates
-  subscribeToTradingUpdates() {
-    if (this.socket?.connected) {
-      this.socket.emit('subscribe_trading_updates');
-    }
+  // Unsubscribe from market data updates
+  public unsubscribeFromMarketData(symbols: string[]): void {
+    this.send({
+      type: 'unsubscribe',
+      data: { symbols },
+    });
   }
 
-  // Subscribe to AI signals
-  subscribeToAISignals() {
-    if (this.socket?.connected) {
-      this.socket.emit('subscribe_ai_signals');
-    }
+  // Subscribe to order updates
+  public subscribeToOrderUpdates(callback: (data: any) => void): void {
+    this.subscribe(WS_EVENTS.ORDER_UPDATE, callback);
+    this.send({
+      type: 'subscribe_orders',
+    });
+  }
+
+  // Subscribe to position updates
+  public subscribeToPositionUpdates(callback: (data: any) => void): void {
+    this.subscribe(WS_EVENTS.POSITION_UPDATE, callback);
+    this.send({
+      type: 'subscribe_positions',
+    });
+  }
+
+  // Subscribe to account updates
+  public subscribeToAccountUpdates(callback: (data: any) => void): void {
+    this.subscribe(WS_EVENTS.ACCOUNT_UPDATE, callback);
+    this.send({
+      type: 'subscribe_account',
+    });
   }
 
   // Subscribe to news updates
-  subscribeToNews(symbols?: string[]) {
-    if (this.socket?.connected) {
-      this.socket.emit('subscribe_news', { symbols });
-    }
+  public subscribeToNewsUpdates(callback: (data: any) => void): void {
+    this.subscribe(WS_EVENTS.NEWS_UPDATE, callback);
+    this.send({
+      type: 'subscribe_news',
+    });
   }
 
-  // Send a custom message
-  emit(event: string, data: any) {
-    if (this.socket?.connected) {
-      this.socket.emit(event, data);
-    } else {
-      console.warn('WebSocket not connected, cannot emit event:', event);
-    }
-  }
-
-  // Disconnect
-  disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-      store.dispatch(updateConnectionStatus(false));
-    }
+  // Subscribe to AI signals
+  public subscribeToAISignals(callback: (data: any) => void): void {
+    this.subscribe(WS_EVENTS.AI_SIGNAL, callback);
+    this.send({
+      type: 'subscribe_ai_signals',
+    });
   }
 
   // Get connection status
-  isConnected(): boolean {
-    return this.socket?.connected || false;
+  public getConnectionStatus(): boolean {
+    return this.isConnected;
+  }
+
+  // Private methods
+
+  private handleMessage(message: WebSocketMessage): void {
+    const { type, data } = message;
+    
+    if (this.subscriptions.has(type)) {
+      this.subscriptions.get(type)!.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error('Error in WebSocket callback:', error);
+        }
+      });
+    }
+  }
+
+  private reconnect(): void {
+    if (this.isReconnecting || this.reconnectAttempts >= this.maxReconnectAttempts) {
+      return;
+    }
+
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+
+    console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+    setTimeout(() => {
+      this.connect().catch(error => {
+        console.error('Reconnection failed:', error);
+        this.isReconnecting = false;
+        
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnect();
+        } else {
+          console.error('Max reconnection attempts reached');
+        }
+      });
+    }, this.reconnectDelay * this.reconnectAttempts);
+  }
+
+  private startHeartbeat(): void {
+    this.heartbeatTimer = setInterval(() => {
+      if (this.isConnected) {
+        this.send({ type: 'ping' });
+      }
+    }, this.heartbeatInterval);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 }
 
-// Create a singleton instance
-const webSocketService = new WebSocketService();
+// Create singleton instance
+export const wsService = new WebSocketService();
 
-export default webSocketService;
+// Market Data WebSocket Hook
+export const useMarketDataWebSocket = (symbols: string[]) => {
+  const [marketData, setMarketData] = React.useState<any>({});
+  const [isConnected, setIsConnected] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleMarketData = (data: any) => {
+      setMarketData(prevData => ({
+        ...prevData,
+        [data.symbol]: data,
+      }));
+    };
+
+    if (!wsService.getConnectionStatus()) {
+      wsService.connect().then(() => {
+        setIsConnected(true);
+        wsService.subscribeToMarketData(symbols, handleMarketData);
+      });
+    } else {
+      setIsConnected(true);
+      wsService.subscribeToMarketData(symbols, handleMarketData);
+    }
+
+    return () => {
+      wsService.unsubscribeFromMarketData(symbols);
+    };
+  }, [symbols]);
+
+  return { marketData, isConnected };
+};
+
+// Order Updates WebSocket Hook
+export const useOrderUpdatesWebSocket = () => {
+  const [orders, setOrders] = React.useState<any[]>([]);
+  const [isConnected, setIsConnected] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleOrderUpdate = (data: any) => {
+      setOrders(prevOrders => {
+        const existingIndex = prevOrders.findIndex(order => order.id === data.id);
+        if (existingIndex >= 0) {
+          const newOrders = [...prevOrders];
+          newOrders[existingIndex] = data;
+          return newOrders;
+        } else {
+          return [...prevOrders, data];
+        }
+      });
+    };
+
+    if (!wsService.getConnectionStatus()) {
+      wsService.connect().then(() => {
+        setIsConnected(true);
+        wsService.subscribeToOrderUpdates(handleOrderUpdate);
+      });
+    } else {
+      setIsConnected(true);
+      wsService.subscribeToOrderUpdates(handleOrderUpdate);
+    }
+
+    return () => {
+      // Cleanup subscription if needed
+    };
+  }, []);
+
+  return { orders, isConnected };
+};
+
+// Position Updates WebSocket Hook
+export const usePositionUpdatesWebSocket = () => {
+  const [positions, setPositions] = React.useState<any[]>([]);
+  const [isConnected, setIsConnected] = React.useState(false);
+
+  React.useEffect(() => {
+    const handlePositionUpdate = (data: any) => {
+      setPositions(prevPositions => {
+        const existingIndex = prevPositions.findIndex(pos => pos.symbol === data.symbol);
+        if (existingIndex >= 0) {
+          const newPositions = [...prevPositions];
+          newPositions[existingIndex] = data;
+          return newPositions;
+        } else {
+          return [...prevPositions, data];
+        }
+      });
+    };
+
+    if (!wsService.getConnectionStatus()) {
+      wsService.connect().then(() => {
+        setIsConnected(true);
+        wsService.subscribeToPositionUpdates(handlePositionUpdate);
+      });
+    } else {
+      setIsConnected(true);
+      wsService.subscribeToPositionUpdates(handlePositionUpdate);
+    }
+
+    return () => {
+      // Cleanup subscription if needed
+    };
+  }, []);
+
+  return { positions, isConnected };
+};
+
+import React from 'react';
+
+export default wsService;
